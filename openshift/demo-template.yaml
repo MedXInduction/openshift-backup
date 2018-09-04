@@ -59,8 +59,9 @@ objects:
       annotations:
         description: Keeps track of the Backup job image
       name: ${NAME}-postgresql-backup-imagestream
-    lookupPolicy:
-      local: true
+    spec:
+      lookupPolicy:
+        local: true
   - apiVersion: v1
     kind: BuildConfig
     metadata:
@@ -213,10 +214,6 @@ objects:
         - type: ConfigChange
 parameters:
 
-- description: Name of project being deployed
-  displayName: Project Name
-  required: true
-  name: PROJECT_NAME
 - description: The name assigned to all of the frontend objects defined in this template.
   displayName: Name
   name: NAME
