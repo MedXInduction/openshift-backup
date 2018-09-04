@@ -42,7 +42,12 @@ objects:
                         secretKeyRef:
                           name: ${NAME}-secrets
                           key: database-service
-                    - name: PG_USER_NAME
+                    - name: PGUSER
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: database-user
+                    - name: PGPASSWORD
                       valueFrom:
                         secretKeyRef:
                           name: ${NAME}-secrets
