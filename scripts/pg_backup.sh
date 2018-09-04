@@ -32,10 +32,10 @@ fi;
 ###########################
  
 # Make sure we're running as the required backup user
-if [ "$BACKUP_USER" != "" -a "$(id -un)" != "$BACKUP_USER" ]; then
-	echo "This script must be run as $BACKUP_USER. Exiting." 1>&2
-	exit 1;
-fi;
+# if [ "$BACKUP_USER" != "" -a "$(id -un)" != "$BACKUP_USER" ]; then
+#   echo "This script must be run as $BACKUP_USER. Exiting." 1>&2
+#   exit 1;
+# fi;
  
  
 ###########################

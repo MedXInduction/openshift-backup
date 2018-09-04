@@ -25,9 +25,10 @@ objects:
                 parent: cronjobpgback
             spec:
               restartPolicy: Never
+              # Make sure it uses the project's docker repo
               containers:
                 - name: postgresql-backup
-                  image: docker-registry.default.svc:5000/${PROJECT_NAME}/${NAME}-postgresql-backup-imagestream
+                  image: ${NAME}-postgresql-backup-imagestream
                   command: 
                     - scripts/pg_backup.sh
                   env:
@@ -53,6 +54,8 @@ objects:
       annotations:
         description: Keeps track of the Backup job image
       name: ${NAME}-postgresql-backup-imagestream
+    lookupPolicy:
+      local: true
   - apiVersion: v1
     kind: BuildConfig
     metadata:
