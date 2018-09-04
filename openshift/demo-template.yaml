@@ -18,32 +18,34 @@ objects:
       schedule: "0 0 * * *"
       jobTemplate:
         spec:
+          restartPolicy: Never
           template:
             metadata:
               labels:
                 parent: cronjobpgback
             spec:
               containers:
-                name: postgresql-backup
-                image: ${NAME}-postgresql-backup-imagestream
-                command: 
-                  - scripts/pg_backup.sh
-                env:
-                  - name: BACKUP_USER
-                    valueFrom:
-                      secretKeyRef:
-                        name: app_secrets
-                        key: database-user
-                  - name: PG_SERVICE_NAME
-                    valueFrom:
-                      secretKeyRef:
-                        name: ${NAME}-secrets
-                        key: database-service
-                  - name: PG_USER_NAME
-                    valueFrom:
-                      secretKeyRef:
-                        name: ${NAME}-secrets
-                        key: database-password
+                - name: postgresql-backup
+                  image: ${NAME}-postgresql-backup-imagestream
+                  command: 
+                    - scripts/pg_backup.sh
+                  env:
+                    - name: BACKUP_USER
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: database-user
+                    - name: PG_SERVICE_NAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: database-service
+                    - name: PG_USER_NAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: database-password
+                  
   - apiVersion: v1
     kind: ImageStream
     metadata:
@@ -90,6 +92,7 @@ objects:
     metadata:
         labels:
             name: "${NAME}-secrets"
+        name: ${NAME}-secrets
     stringData:
       database-service: "${NAME}-${DATABASE_SERVICE_NAME}"
       database-name: ${POSTGRESQL_DATABASE}
@@ -122,8 +125,6 @@ objects:
   - apiVersion: v1
     kind: DeploymentConfig
     metadata:
-      annotations:
-        template.alpha.openshift.io/wait-for-ready: "true"
       name: ${NAME}-${DATABASE_SERVICE_NAME}
     spec:
       replicas: 1
@@ -187,10 +188,6 @@ objects:
               resources:
                 limits:
                   memory: ${MEMORY_LIMIT}
-              securityContext:
-                capabilities: {}
-                privileged: false
-              terminationMessagePath: /dev/termination-log
               volumeMounts:
                 - mountPath: /var/lib/pgsql/data
                   name: ${NAME}-${DATABASE_SERVICE_NAME}-data
@@ -206,6 +203,7 @@ objects:
               namespace: ${NAMESPACE}
         - type: ConfigChange
 parameters:
+
 - description: The name assigned to all of the frontend objects defined in this template.
   displayName: Name
   name: NAME
@@ -253,3 +251,13 @@ parameters:
   displayName: Git Reference
   name: SOURCE_REPOSITORY_REF
   value: master
+- description: Maximum amount of memory each PostgreSQL container can use.
+  displayName: Memory Limit
+  name: MEMORY_LIMIT
+  required: true
+  value: 512Mi
+- description: The OpenShift Namespace where the ImageStream resides.
+  displayName: Namespace
+  name: NAMESPACE
+  required: true
+  value: openshift
