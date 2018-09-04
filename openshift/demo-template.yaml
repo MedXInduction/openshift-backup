@@ -16,6 +16,7 @@ objects:
       name: postgres-daily-backup
     spec:
       schedule: "*/2 * * * *"
+      
       jobTemplate:
         spec:
           template:
@@ -26,7 +27,7 @@ objects:
               restartPolicy: Never
               containers:
                 - name: postgresql-backup
-                  image: ${NAME}-postgresql-backup-imagestream
+                  image: docker-registry.default.svc:5000/${PROJECT_NAME}/${NAME}-postgresql-backup-imagestream
                   command: 
                     - scripts/pg_backup.sh
                   env:
@@ -204,6 +205,10 @@ objects:
         - type: ConfigChange
 parameters:
 
+- description: Name of project being deployed
+  displayName: Project Name
+  required: true
+  name: PROJECT_NAME
 - description: The name assigned to all of the frontend objects defined in this template.
   displayName: Name
   name: NAME
