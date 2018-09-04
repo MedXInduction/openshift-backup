@@ -15,15 +15,15 @@ objects:
     metadata: 
       name: postgres-daily-backup
     spec:
-      schedule: "0 0 * * *"
+      schedule: "*/2 * * * *"
       jobTemplate:
         spec:
-          restartPolicy: Never
           template:
             metadata:
               labels:
                 parent: cronjobpgback
             spec:
+              restartPolicy: Never
               containers:
                 - name: postgresql-backup
                   image: ${NAME}-postgresql-backup-imagestream
@@ -72,7 +72,7 @@ objects:
           sourceStrategy:
             from:
               kind: DockerImage
-              name: postgresql
+              name: rhscl/postgresql-95-rhel7
           type: Source
         triggers:
           - type: ImageChange
@@ -153,17 +153,17 @@ objects:
                   valueFrom:
                     secretKeyRef:
                       key: database-user
-                      name: ${DATABASE_SERVICE_NAME}
+                      name: ${NAME}-secrets
                 - name: POSTGRESQL_PASSWORD
                   valueFrom:
                     secretKeyRef:
                       key: database-password
-                      name: ${DATABASE_SERVICE_NAME}
+                      name: ${NAME}-secrets
                 - name: POSTGRESQL_DATABASE
                   valueFrom:
                     secretKeyRef:
                       key: database-name
-                      name: ${DATABASE_SERVICE_NAME}
+                      name: ${NAME}-secrets
               image: ' '
               imagePullPolicy: IfNotPresent
               livenessProbe:
@@ -245,12 +245,12 @@ parameters:
   displayName: Git Repository URL
   name: SOURCE_REPOSITORY_URL
   required: true
-  value: git@github.com:ukcloud-rubeon/openshift-backup.git
+  value: https://github.com/ukcloud-rubeon/openshift-backup.git
 - description: Set this to a branch name, tag or other ref of your repository if you
     are not using the default branch.
   displayName: Git Reference
   name: SOURCE_REPOSITORY_REF
-  value: master
+  value: ''
 - description: Maximum amount of memory each PostgreSQL container can use.
   displayName: Memory Limit
   name: MEMORY_LIMIT
