@@ -1,0 +1,264 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+labels:
+    template: backup-demo
+metadata:
+    annotations:
+        description: The Refero Laravel Application
+        iconClass: icon-laravel
+        openshift.io/display-name: Refero Laravel Application
+        tags: php,laravel
+    name: refero-laravel
+objects:
+  - apiVersion: batch/v1beta1
+    kind: CronJob
+    metadata: 
+      name: postgres-daily-backup
+    spec:
+      schedule: "0 0 * * *"
+      jobTemplate:
+        spec:
+          template:
+            metadata:
+              labels:
+                parent: cronjobpgback
+            spec:
+              containers:
+                name: postgresql-backup
+                image: ${NAME}-postgresql-backup-imagestream
+                command: 
+                  - scripts/pg_backup.sh
+                env:
+                  - name: BACKUP_USER
+                    valueFrom:
+                      secretKeyRef:
+                        name: app_secrets
+                        key: database-user
+                  - name: HOSTNAME
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${NAME}-secrets
+                        key: database-service
+                  - name: HOSTNAME
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${NAME}-secrets
+                        key: database-password
+                  - name: CONTEXT_DIR
+                    valueFrom:
+                      configMapKeyRef:
+                        name: ${NAME}-config
+                        key: context-dir
+    - apiVersion: v1
+      kind: ImageStream
+      metadata:
+          annotations:
+            description: Keeps track of the Backup job image
+          name: ${NAME}-postgresql-backup-imagestream
+    - apiVersion: v1
+      kind: BuildConfig
+      metadata:
+        annotations:
+          description: Defines how to build the backup job image
+        name: ${NAME}-postgresql-backup-buildconfig
+      spec:
+        output:
+          to:
+            kind: ImageStreamTag
+            name: ${NAME}-postgresql-backup-imagestream:latest
+        source:
+          git:
+            ref: ${SOURCE_REPOSITORY_REF}
+            uri: ${SOURCE_REPOSITORY_URL}
+          type: Git
+        strategy:
+          sourceStrategy:
+            from:
+              kind: DockerImage
+              name: postgresql
+          type: Source
+        triggers:
+          - type: ImageChange
+          - type: ConfigChange
+          - github:
+              secret: ${GITHUB_WEBHOOK_SECRET}
+            type: GitHub
+    - apiVersion: v1
+      kind: BuildConfig
+      
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        labels:
+          name: "${NAME}-config"
+      data:
+        context-dir: ${CONTEXT_DIR}
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+          labels:
+              name: "${NAME}-secrets"
+      stringData:
+        database-service: "${NAME}-${DATABASE_SERVICE_NAME}"
+        database-name: ${POSTGRESQL_DATABASE}
+        database-password: ${POSTGRESQL_PASSWORD}
+        database-user: ${POSTGRESQL_USER}      
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        name: ${NAME}-${DATABASE_SERVICE_NAME}
+      spec:
+        ports:
+          - name: postgresql
+            nodePort: 0
+            port: 5432
+            protocol: TCP
+            targetPort: 5432
+        selector:
+          name: ${NAME}-${DATABASE_SERVICE_NAME}
+        type: ClusterIP
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: ${NAME}-${DATABASE_SERVICE_NAME}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${VOLUME_CAPACITY}
+    - apiVersion: v1
+      kind: DeploymentConfig
+      metadata:
+        annotations:
+          template.alpha.openshift.io/wait-for-ready: "true"
+        name: ${NAME}-${DATABASE_SERVICE_NAME}
+      spec:
+        replicas: 1
+        selector:
+          name: ${NAME}-${DATABASE_SERVICE_NAME}
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              name: ${NAME}-${DATABASE_SERVICE_NAME}
+          spec:
+            dnsPolicy: ClusterFirst
+            restartPolicy: Always
+            volumes:
+              - name: ${NAME}-${DATABASE_SERVICE_NAME}-data
+                persistentVolumeClaim:
+                  claimName: ${NAME}-${DATABASE_SERVICE_NAME}
+            containers:
+              - name: postgresql
+                ports:
+                  - containerPort: 5432
+                    protocol: TCP
+                env:
+                  - name: POSTGRESQL_USER
+                    valueFrom:
+                      secretKeyRef:
+                        key: database-user
+                        name: ${DATABASE_SERVICE_NAME}
+                  - name: POSTGRESQL_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        key: database-password
+                        name: ${DATABASE_SERVICE_NAME}
+                  - name: POSTGRESQL_DATABASE
+                    valueFrom:
+                      secretKeyRef:
+                        key: database-name
+                        name: ${DATABASE_SERVICE_NAME}
+                image: ' '
+                imagePullPolicy: IfNotPresent
+                livenessProbe:
+                  exec:
+                    command:
+                      - /bin/sh
+                      - -i
+                      - -c
+                      - pg_isready -h 127.0.0.1 -p 5432
+                  initialDelaySeconds: 30
+                  timeoutSeconds: 1
+                readinessProbe:
+                  exec:
+                    command:
+                    - /bin/sh
+                    - -i
+                    - -c
+                    - psql -h 127.0.0.1 -U $POSTGRESQL_USER -q -d $POSTGRESQL_DATABASE -c
+                      'SELECT 1'
+                  initialDelaySeconds: 5
+                  timeoutSeconds: 1
+                resources:
+                  limits:
+                    memory: ${MEMORY_LIMIT}
+                securityContext:
+                  capabilities: {}
+                  privileged: false
+                terminationMessagePath: /dev/termination-log
+                volumeMounts:
+                  - mountPath: /var/lib/pgsql/data
+                    name: ${NAME}-${DATABASE_SERVICE_NAME}-data
+        triggers:
+          - type: ImageChange
+            imageChangeParams:
+              automatic: true
+              containerNames:
+                - postgresql
+              from:
+                kind: ImageStreamTag
+                name: postgresql:${POSTGRESQL_VERSION}
+                namespace: ${NAMESPACE}
+          - type: ConfigChange
+
+parameters:
+- description: The name assigned to all of the frontend objects defined in this template.
+  displayName: Name
+  name: NAME
+  required: true
+  value: pg-backup-demo
+- description: The name of the OpenShift Service exposed for the database.
+  displayName: Database Service Name
+  name: DATABASE_SERVICE_NAME
+  required: true
+  value: postgres
+- description: Username for PostgreSQL user that will be used for accessing the database.
+  displayName: PostgreSQL Connection Username
+  from: user[A-Z0-9]{3}
+  generate: expression
+  name: POSTGRESQL_USER
+  required: true
+- description: Password for the PostgreSQL connection user.
+  displayName: PostgreSQL Connection Password
+  from: '[a-zA-Z0-9]{16}'
+  generate: expression
+  name: POSTGRESQL_PASSWORD
+  required: true
+- description: Name of the PostgreSQL database accessed.
+  displayName: PostgreSQL Database Name
+  name: POSTGRESQL_DATABASE
+  required: true
+  value: sampledb
+- description: Volume space available for data, e.g. 512Mi, 2Gi.
+  displayName: Volume Capacity
+  name: VOLUME_CAPACITY
+  required: true
+  value: 1Gi
+- description: Version of PostgreSQL image to be used (9.4, 9.5, 9.6 or latest).
+  displayName: Version of PostgreSQL Image
+  name: POSTGRESQL_VERSION
+  required: true
+  value: "9.5"  
+- description: The URL of the repository with your application source code.
+  displayName: Git Repository URL
+  name: SOURCE_REPOSITORY_URL
+  required: true
+  value: git@github.com:ukcloud-rubeon/openshift-backup.git
+- description: Set this to a branch name, tag or other ref of your repository if you
+    are not using the default branch.
+  displayName: Git Reference
+  name: SOURCE_REPOSITORY_REF
+  value: master
