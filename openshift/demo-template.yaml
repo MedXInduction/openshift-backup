@@ -4,11 +4,11 @@ labels:
     template: backup-demo
 metadata:
     annotations:
-        description: The Refero Laravel Application
-        iconClass: icon-laravel
-        openshift.io/display-name: Refero Laravel Application
-        tags: php,laravel
-    name: refero-laravel
+        description: PostgreSQL Backup Demo
+        iconClass: icon-postgresql
+        openshift.io/display-name: PostgreSQL Backup Demo
+        tags: postgresql, backup, demo
+    name: backup-demo
 objects:
   - apiVersion: batch/v1beta1
     kind: CronJob
@@ -34,34 +34,29 @@ objects:
                       secretKeyRef:
                         name: app_secrets
                         key: database-user
-                  - name: HOSTNAME
+                  - name: PG_SERVICE_NAME
                     valueFrom:
                       secretKeyRef:
                         name: ${NAME}-secrets
                         key: database-service
-                  - name: HOSTNAME
+                  - name: PG_USER_NAME
                     valueFrom:
                       secretKeyRef:
                         name: ${NAME}-secrets
                         key: database-password
-                  - name: CONTEXT_DIR
-                    valueFrom:
-                      configMapKeyRef:
-                        name: ${NAME}-config
-                        key: context-dir
-    - apiVersion: v1
-      kind: ImageStream
-      metadata:
-          annotations:
-            description: Keeps track of the Backup job image
-          name: ${NAME}-postgresql-backup-imagestream
-    - apiVersion: v1
-      kind: BuildConfig
-      metadata:
-        annotations:
-          description: Defines how to build the backup job image
-        name: ${NAME}-postgresql-backup-buildconfig
-      spec:
+  - apiVersion: v1
+    kind: ImageStream
+    metadata:
+      annotations:
+        description: Keeps track of the Backup job image
+      name: ${NAME}-postgresql-backup-imagestream
+  - apiVersion: v1
+    kind: BuildConfig
+    metadata:
+      annotations:
+        description: Defines how to build the backup job image
+      name: ${NAME}-postgresql-backup-buildconfig
+    spec:
         output:
           to:
             kind: ImageStreamTag
@@ -83,137 +78,133 @@ objects:
           - github:
               secret: ${GITHUB_WEBHOOK_SECRET}
             type: GitHub
-    - apiVersion: v1
-      kind: BuildConfig
-      
-    - apiVersion: v1
-      kind: ConfigMap
-      metadata:
+    # - apiVersion: v1
+    #   kind: ConfigMap
+    #   metadata:
+    #     labels:
+    #       name: "${NAME}-config"
+    #   data:
+    #     context-dir: ${CONTEXT_DIR}
+  - apiVersion: v1
+    kind: Secret
+    metadata:
         labels:
-          name: "${NAME}-config"
-      data:
-        context-dir: ${CONTEXT_DIR}
-    - apiVersion: v1
-      kind: Secret
-      metadata:
+            name: "${NAME}-secrets"
+    stringData:
+      database-service: "${NAME}-${DATABASE_SERVICE_NAME}"
+      database-name: ${POSTGRESQL_DATABASE}
+      database-password: ${POSTGRESQL_PASSWORD}
+      database-user: ${POSTGRESQL_USER}      
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: ${NAME}-${DATABASE_SERVICE_NAME}
+    spec:
+      ports:
+        - name: postgresql
+          nodePort: 0
+          port: 5432
+          protocol: TCP
+          targetPort: 5432
+      selector:
+        name: ${NAME}-${DATABASE_SERVICE_NAME}
+      type: ClusterIP
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ${NAME}-${DATABASE_SERVICE_NAME}
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: ${VOLUME_CAPACITY}
+  - apiVersion: v1
+    kind: DeploymentConfig
+    metadata:
+      annotations:
+        template.alpha.openshift.io/wait-for-ready: "true"
+      name: ${NAME}-${DATABASE_SERVICE_NAME}
+    spec:
+      replicas: 1
+      selector:
+        name: ${NAME}-${DATABASE_SERVICE_NAME}
+      strategy:
+        type: Recreate
+      template:
+        metadata:
           labels:
-              name: "${NAME}-secrets"
-      stringData:
-        database-service: "${NAME}-${DATABASE_SERVICE_NAME}"
-        database-name: ${POSTGRESQL_DATABASE}
-        database-password: ${POSTGRESQL_PASSWORD}
-        database-user: ${POSTGRESQL_USER}      
-    - apiVersion: v1
-      kind: Service
-      metadata:
-        name: ${NAME}-${DATABASE_SERVICE_NAME}
-      spec:
-        ports:
-          - name: postgresql
-            nodePort: 0
-            port: 5432
-            protocol: TCP
-            targetPort: 5432
-        selector:
-          name: ${NAME}-${DATABASE_SERVICE_NAME}
-        type: ClusterIP
-    - apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: ${NAME}-${DATABASE_SERVICE_NAME}
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: ${VOLUME_CAPACITY}
-    - apiVersion: v1
-      kind: DeploymentConfig
-      metadata:
-        annotations:
-          template.alpha.openshift.io/wait-for-ready: "true"
-        name: ${NAME}-${DATABASE_SERVICE_NAME}
-      spec:
-        replicas: 1
-        selector:
-          name: ${NAME}-${DATABASE_SERVICE_NAME}
-        strategy:
-          type: Recreate
-        template:
-          metadata:
-            labels:
-              name: ${NAME}-${DATABASE_SERVICE_NAME}
-          spec:
-            dnsPolicy: ClusterFirst
-            restartPolicy: Always
-            volumes:
-              - name: ${NAME}-${DATABASE_SERVICE_NAME}-data
-                persistentVolumeClaim:
-                  claimName: ${NAME}-${DATABASE_SERVICE_NAME}
-            containers:
-              - name: postgresql
-                ports:
-                  - containerPort: 5432
-                    protocol: TCP
-                env:
-                  - name: POSTGRESQL_USER
-                    valueFrom:
-                      secretKeyRef:
-                        key: database-user
-                        name: ${DATABASE_SERVICE_NAME}
-                  - name: POSTGRESQL_PASSWORD
-                    valueFrom:
-                      secretKeyRef:
-                        key: database-password
-                        name: ${DATABASE_SERVICE_NAME}
-                  - name: POSTGRESQL_DATABASE
-                    valueFrom:
-                      secretKeyRef:
-                        key: database-name
-                        name: ${DATABASE_SERVICE_NAME}
-                image: ' '
-                imagePullPolicy: IfNotPresent
-                livenessProbe:
-                  exec:
-                    command:
-                      - /bin/sh
-                      - -i
-                      - -c
-                      - pg_isready -h 127.0.0.1 -p 5432
-                  initialDelaySeconds: 30
-                  timeoutSeconds: 1
-                readinessProbe:
-                  exec:
-                    command:
+            name: ${NAME}-${DATABASE_SERVICE_NAME}
+        spec:
+          dnsPolicy: ClusterFirst
+          restartPolicy: Always
+          volumes:
+            - name: ${NAME}-${DATABASE_SERVICE_NAME}-data
+              persistentVolumeClaim:
+                claimName: ${NAME}-${DATABASE_SERVICE_NAME}
+          containers:
+            - name: postgresql
+              ports:
+                - containerPort: 5432
+                  protocol: TCP
+              env:
+                - name: POSTGRESQL_USER
+                  valueFrom:
+                    secretKeyRef:
+                      key: database-user
+                      name: ${DATABASE_SERVICE_NAME}
+                - name: POSTGRESQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: database-password
+                      name: ${DATABASE_SERVICE_NAME}
+                - name: POSTGRESQL_DATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      key: database-name
+                      name: ${DATABASE_SERVICE_NAME}
+              image: ' '
+              imagePullPolicy: IfNotPresent
+              livenessProbe:
+                exec:
+                  command:
                     - /bin/sh
                     - -i
                     - -c
-                    - psql -h 127.0.0.1 -U $POSTGRESQL_USER -q -d $POSTGRESQL_DATABASE -c
-                      'SELECT 1'
-                  initialDelaySeconds: 5
-                  timeoutSeconds: 1
-                resources:
-                  limits:
-                    memory: ${MEMORY_LIMIT}
-                securityContext:
-                  capabilities: {}
-                  privileged: false
-                terminationMessagePath: /dev/termination-log
-                volumeMounts:
-                  - mountPath: /var/lib/pgsql/data
-                    name: ${NAME}-${DATABASE_SERVICE_NAME}-data
-        triggers:
-          - type: ImageChange
-            imageChangeParams:
-              automatic: true
-              containerNames:
-                - postgresql
-              from:
-                kind: ImageStreamTag
-                name: postgresql:${POSTGRESQL_VERSION}
-                namespace: ${NAMESPACE}
-          - type: ConfigChange
-
+                    - pg_isready -h 127.0.0.1 -p 5432
+                initialDelaySeconds: 30
+                timeoutSeconds: 1
+              readinessProbe:
+                exec:
+                  command:
+                  - /bin/sh
+                  - -i
+                  - -c
+                  - psql -h 127.0.0.1 -U $POSTGRESQL_USER -q -d $POSTGRESQL_DATABASE -c
+                    'SELECT 1'
+                initialDelaySeconds: 5
+                timeoutSeconds: 1
+              resources:
+                limits:
+                  memory: ${MEMORY_LIMIT}
+              securityContext:
+                capabilities: {}
+                privileged: false
+              terminationMessagePath: /dev/termination-log
+              volumeMounts:
+                - mountPath: /var/lib/pgsql/data
+                  name: ${NAME}-${DATABASE_SERVICE_NAME}-data
+      triggers:
+        - type: ImageChange
+          imageChangeParams:
+            automatic: true
+            containerNames:
+              - postgresql
+            from:
+              kind: ImageStreamTag
+              name: postgresql:${POSTGRESQL_VERSION}
+              namespace: ${NAMESPACE}
+        - type: ConfigChange
 parameters:
 - description: The name assigned to all of the frontend objects defined in this template.
   displayName: Name
