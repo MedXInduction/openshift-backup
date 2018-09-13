@@ -158,3 +158,6 @@ do
 done
  
 echo -e "\nAll database backups complete!"
+
+# sync to s3
+

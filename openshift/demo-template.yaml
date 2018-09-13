@@ -15,7 +15,7 @@ objects:
     metadata: 
       name: postgres-daily-backup
     spec:
-      schedule: "*/2 * * * *"
+      schedule: "*/15 * * * *"
       
       jobTemplate:
         spec:
@@ -52,6 +52,28 @@ objects:
                         secretKeyRef:
                           name: ${NAME}-secrets
                           key: database-password
+                    - name: AWS_ACCESS_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: aws-access-key
+                    - name: AWS_SECRET_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: aws-secret-key
+                    - name: HOST_BASE
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: host-base
+                    - name: BUCKET_NAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: bucket-name
+                    
+
                   
   - apiVersion: v1
     kind: ImageStream
