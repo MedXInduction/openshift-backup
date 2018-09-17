@@ -1,0 +1,195 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+labels:
+    template: backup-demo
+metadata:
+    annotations:
+        description: PostgreSQL Backup Demo
+        iconClass: icon-postgresql
+        openshift.io/display-name: PostgreSQL Backup Demo
+        tags: postgresql, backup, demo
+    name: backup-demo
+objects:
+  - apiVersion: batch/v1beta1
+    kind: CronJob
+    metadata: 
+      name: postgres-daily-backup
+    spec:
+      schedule: "*/${FREQUENCY} * * * *"
+      
+      jobTemplate:
+        spec:
+          template:
+            metadata:
+              labels:
+                parent: cronjobpgback
+            spec:
+              restartPolicy: Never
+              # Make sure it uses the project's docker repo
+              containers:
+                - name: postgresql-backup
+                  image: ${NAME}-postgresql-backup-imagestream
+                  command: 
+                    - scripts/pg_backup.sh
+                  env:
+                    - name: BACKUP_USER
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: database-user
+                    - name: PG_SERVICE_NAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: database-service
+                    - name: PGUSER
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: database-user
+                    - name: PGPASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: database-password
+                    - name: AWS_ACCESS_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: aws-access-key
+                    - name: AWS_SECRET_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: aws-secret-key
+                    - name: HOST_BASE
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: host-base
+                    - name: BUCKET_NAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: ${NAME}-secrets
+                          key: bucket-name
+                    
+
+                  
+  - apiVersion: v1
+    kind: ImageStream
+    metadata:
+      annotations:
+        description: Keeps track of the Backup job image
+      name: ${NAME}-postgresql-backup-imagestream
+    spec:
+      lookupPolicy:
+        local: true
+  - apiVersion: v1
+    kind: BuildConfig
+    metadata:
+      annotations:
+        description: Defines how to build the backup job image
+      name: ${NAME}-postgresql-backup-buildconfig
+    spec:
+        output:
+          to:
+            kind: ImageStreamTag
+            name: ${NAME}-postgresql-backup-imagestream:latest
+        source:
+          git:
+            ref: ${SOURCE_REPOSITORY_REF}
+            uri: ${SOURCE_REPOSITORY_URL}
+          type: Git
+        strategy:
+          sourceStrategy:
+            from:
+              kind: DockerImage
+              name: rhscl/postgresql-95-rhel7
+          type: Source
+        triggers:
+          - type: ImageChange
+          - type: ConfigChange
+          - github:
+              secret: ${GITHUB_WEBHOOK_SECRET}
+            type: GitHub
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+        labels:
+            name: "${NAME}-secrets"
+        name: ${NAME}-secrets
+    stringData:
+      aws-access-key: "${AWS_ACCESS_KEY}"
+      aws-secret-key: "${AWS_SECRET_KEY}"
+      host-base: "${HOST_BASE}"
+      bucket-name: "${BUCKET_NAME}"
+      database-service: "${NAME}-${DATABASE_SERVICE_NAME}"
+      database-name: ${POSTGRESQL_DATABASE}
+      database-password: ${POSTGRESQL_PASSWORD}
+      database-user: ${POSTGRESQL_USER}      
+parameters:
+- description: ECS Access Key (from portal)
+  displayName: ECS Access Key
+  name: AWS_ACCESS_KEY
+  required: true
+- description: AWS Secret Key (from portal)
+  displayName: ECS Secret Key
+  name: AWS_SECRET_KEY
+  required: true
+- description: Host Basename
+  displayName: Host Base
+  name: HOST_BASE
+  required: true
+  value: cas.frn00006.ukcloud.com    
+- description: The name assigned to all of the frontend objects defined in this template.
+  displayName: Name
+  name: NAME
+  required: true
+  value: pg-backup-demo
+- description: The name of the OpenShift Service exposed for the database.
+  displayName: Database Service Name
+  name: DATABASE_SERVICE_NAME
+  required: true
+  value: postgres
+- description: Username for PostgreSQL user that will be used for accessing the database.
+  displayName: PostgreSQL Connection Username
+  from: user[A-Z0-9]{3}
+  generate: expression
+  name: POSTGRESQL_USER
+  required: true
+- description: Password for the PostgreSQL connection user.
+  displayName: PostgreSQL Connection Password
+  from: '[a-zA-Z0-9]{16}'
+  generate: expression
+  name: POSTGRESQL_PASSWORD
+  required: true
+- description: Name of the PostgreSQL database accessed.
+  displayName: PostgreSQL Database Name
+  name: POSTGRESQL_DATABASE
+  required: true
+  value: sampledb
+- description: Version of PostgreSQL image to be used (9.4, 9.5, 9.6 or latest).
+  displayName: Version of PostgreSQL Image
+  name: POSTGRESQL_VERSION
+  required: true
+  value: "9.5"  
+- description: The URL of the repository with your application source code.
+  displayName: Git Repository URL
+  name: SOURCE_REPOSITORY_URL
+  required: true
+  value: https://github.com/ukcloud-rubeon/openshift-backup.git
+- description: Set this to a branch name, tag or other ref of your repository if you
+    are not using the default branch.
+  displayName: Git Reference
+  name: SOURCE_REPOSITORY_REF
+  value: ''
+- description: The OpenShift Namespace where the ImageStream resides.
+  displayName: Namespace
+  name: NAMESPACE
+  required: true
+  value: openshift
+- description: Frequency of Job (in minutes)
+  displayName: Frequency
+  name: FREQUENCY
+  required: true
+  value: 15
