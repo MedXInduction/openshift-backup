@@ -104,7 +104,7 @@ objects:
           sourceStrategy:
             from:
               kind: DockerImage
-              name: rhscl/postgresql-95-rhel7
+              name: ukcloudrubeon/postgres-95-postgis-ecscli
           type: Source
         triggers:
           - type: ImageChange
