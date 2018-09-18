@@ -33,12 +33,6 @@ source "${CONFIG_FILE_PATH}"
 #### PRE-BACKUP CHECKS ####
 ###########################
  
-# Make sure we're running as the required backup user
-if [ "$BACKUP_USER" != "" -a "$(id -un)" != "$BACKUP_USER" ] ; then
-	echo "This script must be run as $BACKUP_USER. Exiting." 1>&2
-	exit 1
-fi
- 
  
 ###########################
 ### INITIALISE DEFAULTS ###
@@ -196,5 +190,7 @@ fi
  
 # Delete daily backups 7 days old or more
 find $BACKUP_DIR -maxdepth 1 -mtime +$DAYS_TO_KEEP -name "*-daily" -exec rm -rf '{}' ';'
- 
-perform_backups "-daily"
+DFMT=`date +"%Y%m%d-%H%M%S"`
+perform_backups "-${DFMT}"
+# sync to s3
+"${SCRIPTPATH}"/push_to_s3.sh "${BACKUP_DIR}"
