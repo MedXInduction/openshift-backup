@@ -160,4 +160,4 @@ done
 echo -e "\nAll database backups complete!"
 
 # sync to s3
-
+"${SCRIPTPATH}"/push_to_s3.sh "${FINAL_BACKUP_DIR}"
