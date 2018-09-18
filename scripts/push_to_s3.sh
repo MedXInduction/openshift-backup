@@ -1,6 +1,7 @@
 #!/bin/bash
 # create the configuration file
 CMDDIR=$(cd -P -- "$(dirname -- "$0")" && pwd -P)
+PYTHONPATH=${APP_ROOT}/ecscli/
 sed "s|ACCESS_KEY|${AWS_ACCESS_KEY}|g" ${CMDDIR}/s3cfg.tmpl | \
   sed "s|SECRET_KEY|${AWS_SECRET_KEY}|g" | \
   sed "s|HOST_BASE|${HOST_BASE}|g" |
