@@ -9,6 +9,6 @@ sed "s|ACCESS_KEY|${AWS_ACCESS_KEY}|g" ${CMDDIR}/s3cfg.tmpl | \
   > ${CMDDIR}/s3cfg
 ${APP_ROOT}/ecscli/bin/s3cmd -c ${CMDDIR}/s3cfg  mb s3://"${BUCKET_NAME}" 
 ${APP_ROOT}/ecscli/bin/s3cmd -c ${CMDDIR}/s3cfg sync $1 s3://${BUCKET_NAME}
-if ["$?" != "0"]; then 
+if [ $? != "0" ]; then
   ./pd_notify.sh
 fi
